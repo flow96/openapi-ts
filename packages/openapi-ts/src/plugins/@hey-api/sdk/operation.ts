@@ -103,41 +103,53 @@ export const operationClasses = ({
   let methodName: string | undefined;
   let classCandidates: Array<string> = [];
 
-  if (plugin.config.classStructure === 'auto' && operation.operationId) {
-    classCandidates = operation.operationId.split(/[./]/).filter(Boolean);
+  if (plugin.config.classStructure === 'auto') {
+    // Use the operationId as the class candidates by default
+    classCandidates =
+      operation.operationId?.split(/[./]/).filter(Boolean) ?? [];
     if (classCandidates.length > 1) {
+      // Pop the method candidate from the class candidates to not have it in the path
       const methodCandidate = classCandidates.pop()!;
       methodName = stringCase({
         case: 'camelCase',
         value: sanitizeNamespaceIdentifier(methodCandidate),
       });
-      className = classCandidates.pop()!;
+    } else {
+      // Fallback: Use the tags as the class candidates
+      classCandidates = [
+        ...(operation.tags && operation.tags.length > 0
+          ? operation.tags
+          : ['default']),
+      ];
     }
+    className =
+      classCandidates.length > 0
+        ? classCandidates[classCandidates.length - 1]!
+        : undefined;
   }
 
-  const rootClasses = plugin.config.instance
-    ? [plugin.config.instance as string]
-    : (operation.tags ?? ['default']);
+  const rootClass = plugin.config.instance
+    ? (plugin.config.instance as string)
+    : className
+      ? classCandidates[0]!
+      : 'default';
 
-  for (const rootClass of rootClasses) {
-    const finalClassName = operationClassName({
-      context,
-      value: className || rootClass,
-    });
-    classNames.set(rootClass, {
-      className: finalClassName,
-      methodName: methodName || getOperationMethodName({ operation, plugin }),
-      path: (className
-        ? [rootClass, ...classCandidates, className]
-        : [rootClass]
-      ).map((value) =>
-        operationClassName({
-          context,
-          value,
-        }),
-      ),
-    });
-  }
+  const finalClassName = operationClassName({
+    context,
+    value: className || rootClass,
+  });
+
+  const path = className ? [rootClass, ...classCandidates] : [rootClass];
+  classNames.set(rootClass, {
+    className: finalClassName,
+    methodName: methodName || getOperationMethodName({ operation, plugin }),
+    path: path.map((value) =>
+      operationClassName({
+        context,
+        value,
+      }),
+    ),
+  });
 
   return classNames;
 };
